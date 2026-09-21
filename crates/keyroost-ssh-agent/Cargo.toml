@@ -1,0 +1,18 @@
+[package]
+name = "keyroost-ssh-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Implementation of the ssh agent protocol on top of keyroost APIs"
+
+[lints]
+workspace = true
+
+[dependencies]
+keyroost-piv = { path = "../keyroost-piv", version = "0.10.0" }
+keyroost-openpgp = { path = "../keyroost-openpgp", version = "0.10.0" }
+zeroize = { version = "1", default-features = false, features = ["alloc"] }
+
+[dev-dependencies]

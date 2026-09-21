@@ -21,6 +21,7 @@ members = [
     "crates/keyroost-import",
     "crates/keyroost-winwebauthn",
     "crates/keyroost-screengrab",
+    "crates/keyroost-ssh-agent",
     "crates/keyroostctl",
     "crates/keyroost",
 ]

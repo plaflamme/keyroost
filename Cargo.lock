@@ -2131,6 +2131,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyroost-ssh-agent"
+version = "0.10.0"
+dependencies = [
+ "keyroost-openpgp",
+ "keyroost-piv",
+ "zeroize",
+]
+
+[[package]]
 name = "keyroost-token2otp"
 version = "0.10.0"
 dependencies = [
