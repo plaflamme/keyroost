@@ -33,6 +33,7 @@ keyroost-import = { path = "../keyroost-import", version = "0.10.0", features = 
 # keyroost; owns the workspace's scoped `rsa` dependency exception so the protocol
 # crates stay dependency-free (see that crate's Cargo.toml).
 keyroost-rsakey = { path = "../keyroost-rsakey", version = "0.10.0" }
+keyroost-ssh-agent = { path = "../keyroost-ssh-agent", version = "0.10.0" }
 clap = { version = "4", features = ["derive"] }
 # Same project family as clap; generate shell completions / a man page at
 # runtime (`completions` / `manpage` subcommands) rather than from a build
@@ -47,6 +48,7 @@ zeroize = { version = "1", default-features = false, features = ["alloc"] }
 # Structured output for the global `--json` flag (status/query commands).
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tokio = {version = "1", default-features = false, features = ["net", "rt-multi-thread"]}
 
 [dev-dependencies]
 # Approved dev-only exception (tests only, never in release builds):

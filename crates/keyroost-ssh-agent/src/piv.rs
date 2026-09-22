@@ -32,9 +32,11 @@ impl PivSshAgent {
     }
 
     pub(super) fn list_identities(&self) -> Result<Vec<Identity>, AgentError> {
+        eprintln!("listing identities from PIV reader {}", self.reader);
         let mut session = keyroost_transport::PivSession::open(&self.reader)
             .map_err(AgentError::TransportError)?;
 
+        eprintln!("looking for identities");
         Ok(self
             .slots
             .iter()
@@ -44,10 +46,18 @@ impl PivSshAgent {
 }
 
 fn slot_to_ssh_identity(session: &mut PivSession, slot: Slot) -> Option<Identity> {
-    if !session.slot_has_key(slot).unwrap_or(false) {
+    eprint!("  in PIV slot {slot:?}: ");
+    let Ok(cert) = session.read_certificate(slot) else {
+        eprintln!("cannot read certificate");
         return None;
-    }
-    let Ok((key_alg, public_key)) = session.slot_key(slot) else {
+    };
+    let Some(cert) = cert else {
+        eprintln!("no certificate");
+        return None;
+    };
+    let Ok((key_alg, public_key)) = keyroost_piv::x509_parse::parse_certificate_public_key(&cert)
+    else {
+        eprintln!("no metadata");
         return None;
     };
 
@@ -60,7 +70,10 @@ fn slot_to_ssh_identity(session: &mut PivSession, slot: Slot) -> Option<Identity
             keyroost_piv::KeyAlg::Rsa1024
             | keyroost_piv::KeyAlg::Rsa2048
             | keyroost_piv::KeyAlg::Rsa3072
-            | keyroost_piv::KeyAlg::Rsa4096 => return None,
+            | keyroost_piv::KeyAlg::Rsa4096 => {
+                eprintln!("unsupported algorithm");
+                return None;
+            }
             keyroost_piv::KeyAlg::EccP256 => KeyData::Ecdsa(
                 EcdsaPublicKey::NistP256(EncodedPoint::from_bytes(&point).unwrap()), // TODO
             ),
@@ -70,9 +83,13 @@ fn slot_to_ssh_identity(session: &mut PivSession, slot: Slot) -> Option<Identity
             keyroost_piv::KeyAlg::Ed25519 => KeyData::Ed25519(
                 Ed25519PublicKey::try_from(point.as_slice()).unwrap(), // TODO
             ),
-            keyroost_piv::KeyAlg::X25519 => return None,
+            keyroost_piv::KeyAlg::X25519 => {
+                eprintln!("unsupported algorithm");
+                return None;
+            }
         },
     };
+    eprintln!("found usable identity");
     Some(Identity {
         credential: PublicCredential::Key(key_data),
         comment: format!("PIV {slot:?}"),

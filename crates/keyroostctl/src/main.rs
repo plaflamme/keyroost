@@ -536,6 +536,16 @@ enum Cmd {
         #[arg(long)]
         yes: bool,
     },
+
+    /// Start an SSH agent backed by the identities found on the cards.
+    Agent {
+        /// Substring of the PC/SC reader name (skips auto-detection for the
+        /// smart-card applets).
+        #[arg(long)]
+        reader: Option<String>,
+        /// Path to the unix socket to bind the agent to.
+        socket_path: std::path::PathBuf,
+    },
 }
 
 /// A PIV key slot, selected on the CLI by its hex key reference.
@@ -2878,6 +2888,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Whole-device factory reset: wipe every resettable applet in planner order.
     if let Cmd::FactoryReset { reader, yes } = cmd {
         return run_factory_reset(reader.as_deref(), *yes, cli.debug);
+    }
+
+    if let Cmd::Agent {
+        reader,
+        socket_path,
+    } = cmd
+    {
+        return run_agent(reader.as_deref(), socket_path);
     }
 
     unreachable!("every subcommand is handled above");
@@ -9014,6 +9032,20 @@ fn run_probe(session: &mut Session, authed: bool, include_destructive: bool, slo
     println!();
     println!("Done. Boring instructions (SW 6D00/6E00) are filtered out.");
     println!("Any ✓ line is an instruction the firmware recognized and completed.");
+}
+
+fn run_agent(reader: Option<&str>, socket_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let readers = keyroost_transport::PivSession::list_piv_readers()?;
+    let by_name = reader_from_name()?;
+    let name = resolve_reader(readers, reader.or(by_name.as_deref()), "PIV")?;
+    eprintln!("\u{2192} PIV on {}", sanitize_terminal(&name));
+    let piv_agent = keyroost_ssh_agent::PivSshAgent::new(name);
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to start tokio runtime")
+        .block_on(keyroost_ssh_agent::run(socket_path, piv_agent))?;
+    Ok(())
 }
 
 fn print_info(info: &keyroost_transport::DeviceInfo) {

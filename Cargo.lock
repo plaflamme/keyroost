@@ -2261,12 +2261,14 @@ dependencies = [
  "keyroost-qr",
  "keyroost-resolve",
  "keyroost-rsakey",
+ "keyroost-ssh-agent",
  "keyroost-token2otp",
  "keyroost-token2prog",
  "keyroost-transport",
  "proptest",
  "serde",
  "serde_json",
+ "tokio",
  "zeroize",
 ]
 
