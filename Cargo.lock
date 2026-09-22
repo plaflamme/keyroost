@@ -2184,9 +2184,14 @@ dependencies = [
 name = "keyroost-ssh-agent"
 version = "0.10.0"
 dependencies = [
+ "ecdsa",
  "keyroost-openpgp",
  "keyroost-piv",
  "keyroost-transport",
+ "p256",
+ "p384",
+ "sha2",
+ "signature",
  "ssh-agent-lib",
  "tokio",
  "zeroize",

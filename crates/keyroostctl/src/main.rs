@@ -9039,7 +9039,8 @@ fn run_agent(reader: Option<&str>, socket_path: &Path) -> Result<(), Box<dyn std
     let by_name = reader_from_name()?;
     let name = resolve_reader(readers, reader.or(by_name.as_deref()), "PIV")?;
     eprintln!("\u{2192} PIV on {}", sanitize_terminal(&name));
-    let piv_agent = keyroost_ssh_agent::PivSshAgent::new(name);
+    let pin = read_secret("PIN", None, true)?;
+    let piv_agent = keyroost_ssh_agent::PivSshAgent::new(name, pin);
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
