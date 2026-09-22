@@ -2186,6 +2186,7 @@ version = "0.10.0"
 dependencies = [
  "keyroost-openpgp",
  "keyroost-piv",
+ "keyroost-transport",
  "ssh-agent-lib",
  "tokio",
  "zeroize",
