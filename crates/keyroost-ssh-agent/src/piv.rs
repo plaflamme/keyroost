@@ -9,7 +9,7 @@ use ssh_agent_lib::{
     ssh_key::{
         public::{EcdsaPublicKey, Ed25519PublicKey, KeyData, RsaPublicKey},
         sec1::EncodedPoint,
-        Mpint, Signature,
+        Algorithm, HashAlg, Mpint, Signature,
     },
 };
 use zeroize::Zeroizing;
@@ -67,6 +67,7 @@ impl PivSshAgent {
         &self,
         public_credential: PublicCredential,
         data: &[u8],
+        rsa_sig_hash: Option<HashAlg>,
     ) -> Result<Option<Signature>, AgentError> {
         let mut session = keyroost_transport::PivSession::open(&self.reader)
             .map_err(AgentError::TransportError)?;
@@ -110,7 +111,24 @@ impl PivSshAgent {
             KeyAlg::Ed25519 => {
                 Signature::new(ssh_agent_lib::ssh_key::Algorithm::Ed25519, signature)?
             }
-            _ => todo!(),
+            KeyAlg::Rsa1024 | KeyAlg::Rsa2048 | KeyAlg::Rsa3072 | KeyAlg::Rsa4096 => {
+                let signature = match rsa_sig_hash {
+                    Some(HashAlg::Sha256) => sha2::Sha256::digest(signature).to_vec(),
+                    Some(HashAlg::Sha512) => sha2::Sha512::digest(signature).to_vec(),
+                    None => signature,
+                    Some(other) => {
+                        return Err(AgentError::Other(
+                            format!("Unsupported RSA hash algorithm {other}").into(),
+                        ))
+                    }
+                };
+                Signature::new(Algorithm::Rsa { hash: rsa_sig_hash }, signature)?
+            }
+            KeyAlg::X25519 => {
+                return Err(AgentError::Other(
+                    "Unsupported signature algorithm X25519".into(),
+                ))
+            }
         };
 
         Ok(Some(signature))

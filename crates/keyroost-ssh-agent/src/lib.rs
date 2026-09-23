@@ -1,7 +1,7 @@
 use ssh_agent_lib::{
     error::AgentError as SshAgentError,
     proto::{Identity, SignRequest},
-    ssh_key::Signature,
+    ssh_key::{HashAlg, Signature},
 };
 use std::path::Path;
 use tokio::net::UnixListener;
@@ -24,17 +24,29 @@ struct KeyroostAgent {
 impl ssh_agent_lib::agent::Session for KeyroostAgent {
     async fn request_identities(&mut self) -> Result<Vec<Identity>, SshAgentError> {
         debug!("request_identities");
+        // TODO: cache identities so we can directly look them up later by public key
         Ok(self.piv.request_identities()?)
     }
 
     async fn sign(&mut self, request: SignRequest) -> Result<Signature, SshAgentError> {
         debug!("sign({:?})", request.credential); // TODO: saner display
 
-        // TODO: use flags to determine RSA hash algorithm
-        let signature = self.piv.sign(request.credential, &request.data)?;
+        let rsa_sig_hash = if request.flags & 0x02 != 0 {
+            Some(HashAlg::Sha256)
+        } else if request.flags & 0x04 != 0 {
+            Some(HashAlg::Sha512)
+        } else {
+            None
+        };
+
+        let signature = self
+            .piv
+            .sign(request.credential, &request.data, rsa_sig_hash)?;
+
         let Some(signature) = signature else {
             return Err(SshAgentError::Failure); // TODO: what error should we return for "not found"?
         };
+
         Ok(signature)
     }
 }
