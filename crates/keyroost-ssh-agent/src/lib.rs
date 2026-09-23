@@ -11,7 +11,6 @@ mod error;
 mod piv;
 
 pub(crate) use crate::error::Error;
-pub use crate::piv::PivSshAgent;
 
 #[derive(Clone)]
 struct KeyroostAgent {
@@ -51,9 +50,20 @@ impl ssh_agent_lib::agent::Session for KeyroostAgent {
 }
 
 /// Launch an SSH agent and bind it to the specified socket path.
-pub async fn run(socket_path: &Path, piv: PivSshAgent) -> Result<(), std::io::Error> {
+pub async fn run(
+    socket_path: &Path,
+    piv_reader: String,
+    pinentry_binary: Option<String>,
+) -> Result<(), std::io::Error> {
     let listener = UnixListener::bind(socket_path)?;
-    match ssh_agent_lib::agent::listen(listener, KeyroostAgent { piv }).await {
+    match ssh_agent_lib::agent::listen(
+        listener,
+        KeyroostAgent {
+            piv: piv::PivSshAgent::new(piv_reader, pinentry_binary),
+        },
+    )
+    .await
+    {
         Ok(_) => Ok(()),
         Err(AgentError::IO(e)) => Err(e),
         Err(other) => Err(std::io::Error::other(other.to_string())),

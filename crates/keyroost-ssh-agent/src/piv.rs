@@ -6,13 +6,13 @@ use keyroost_transport::PivSession;
 use sha2::Digest;
 use ssh_agent_lib::{
     proto::{Identity, PublicCredential},
+    secrecy::{self, ExposeSecret},
     ssh_key::{
         public::{EcdsaPublicKey, Ed25519PublicKey, KeyData, RsaPublicKey},
         sec1::EncodedPoint,
         Algorithm, HashAlg, Mpint, Signature,
     },
 };
-use zeroize::Zeroizing;
 
 struct PivIdentity {
     slot: Slot,
@@ -27,15 +27,15 @@ impl From<PivIdentity> for Identity {
 }
 
 #[derive(Clone)]
-pub struct PivSshAgent {
+pub(super) struct PivSshAgent {
     reader: String,
-    pin: Zeroizing<String>, // TODO: pinentry
     slots: Vec<Slot>,
+    pinentry_binary: Option<String>,
 }
 
 impl PivSshAgent {
     // TODO: manually select slots
-    pub fn new(reader: String, pin: Zeroizing<String>) -> Self {
+    pub(super) fn new(reader: String, pinentry_binary: Option<String>) -> Self {
         // default signature-related slots
         let sign_slots: &[Slot] = &[
             Slot::Authentication,
@@ -45,7 +45,7 @@ impl PivSshAgent {
 
         Self {
             reader,
-            pin,
+            pinentry_binary,
             slots: Vec::from_iter([sign_slots, &Slot::retired_all()].concat()),
         }
     }
@@ -78,8 +78,12 @@ impl PivSshAgent {
             return Ok(None);
         };
 
-        // TODO: pinentry, slot policy
-        session.verify_pin(self.pin.as_bytes())?;
+        // TODO: slot policy
+        let Some(pin) = self.prompt_pin()? else {
+            return Ok(None);
+        };
+
+        session.verify_pin(pin.expose_secret().as_bytes())?;
 
         let sig_hash = match keyroost_piv::x509::signature_hash(piv_identity.key_alg) {
             Ok(sig_hash) => sig_hash,
@@ -127,6 +131,32 @@ impl PivSshAgent {
         };
 
         Ok(Some(signature))
+    }
+
+    fn prompt_pin(&self) -> Result<Option<secrecy::SecretBox<str>>, crate::Error> {
+        let pinentry = match self.pinentry_binary.as_ref() {
+            Some(binary_name) => pinentry::PassphraseInput::with_binary(binary_name),
+            None => pinentry::PassphraseInput::with_default_binary(),
+        };
+
+        let Some(mut pinentry) = pinentry else {
+            return Err(crate::Error::Other("pinentry binary not found".into()));
+        };
+
+        let pin = pinentry
+            .with_prompt("PIN") // TODO: show card serial number
+            .with_description("Please unlock the card")
+            .required("PIN cannot be empty")
+            .interact();
+
+        match pin {
+            Ok(pin) => Ok(Some(pin)),
+            Err(pinentry::Error::Cancelled) => Ok(None),
+            Err(other) => {
+                tracing::warn!("pinentry failed {other}");
+                Ok(None)
+            }
+        }
     }
 
     fn list_identities<'a: 'b, 'b>(
