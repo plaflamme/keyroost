@@ -102,15 +102,18 @@ impl PivSshAgent {
             KeyAlg::EccP256 => Signature::try_from(
                 ecdsa::Signature::<p256::NistP256>::from_der(&signature)
                     .map_err(|e| AgentError::Other(Box::new(e)))?,
-            ),
+            )?,
             KeyAlg::EccP384 => Signature::try_from(
                 ecdsa::Signature::<p384::NistP384>::from_der(&signature)
                     .map_err(|e| AgentError::Other(Box::new(e)))?,
-            ),
+            )?,
+            KeyAlg::Ed25519 => {
+                Signature::new(ssh_agent_lib::ssh_key::Algorithm::Ed25519, signature)?
+            }
             _ => todo!(),
         };
 
-        Ok(Some(signature?))
+        Ok(Some(signature))
     }
 
     fn list_identities<'a: 'b, 'b>(

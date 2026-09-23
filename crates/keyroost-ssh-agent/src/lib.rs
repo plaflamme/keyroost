@@ -15,8 +15,9 @@ pub use error::AgentError;
 pub use crate::piv::PivSshAgent;
 
 #[derive(Clone)]
-pub struct KeyroostAgent {
+struct KeyroostAgent {
     piv: piv::PivSshAgent,
+    // TODO: openpgp identity
 }
 
 #[ssh_agent_lib::async_trait]
@@ -28,6 +29,8 @@ impl ssh_agent_lib::agent::Session for KeyroostAgent {
 
     async fn sign(&mut self, request: SignRequest) -> Result<Signature, SshAgentError> {
         debug!("sign({:?})", request.credential); // TODO: saner display
+
+        // TODO: use flags to determine RSA hash algorithm
         let signature = self.piv.sign(request.credential, &request.data)?;
         let Some(signature) = signature else {
             return Err(SshAgentError::Failure); // TODO: what error should we return for "not found"?
@@ -36,6 +39,7 @@ impl ssh_agent_lib::agent::Session for KeyroostAgent {
     }
 }
 
+/// Launch an SSH agent and bind it to the specified socket path.
 pub async fn run(socket_path: &Path, piv: PivSshAgent) -> Result<(), AgentError> {
     let listener = UnixListener::bind(socket_path)?;
     ssh_agent_lib::agent::listen(listener, KeyroostAgent { piv }).await?;
