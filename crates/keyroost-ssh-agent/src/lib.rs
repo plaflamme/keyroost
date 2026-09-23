@@ -5,6 +5,7 @@ use ssh_agent_lib::{
 };
 use std::path::Path;
 use tokio::net::UnixListener;
+use tracing::debug;
 
 mod error;
 mod piv;
@@ -21,10 +22,12 @@ pub struct KeyroostAgent {
 #[ssh_agent_lib::async_trait]
 impl ssh_agent_lib::agent::Session for KeyroostAgent {
     async fn request_identities(&mut self) -> Result<Vec<Identity>, SshAgentError> {
+        debug!("request_identities");
         Ok(self.piv.request_identities()?)
     }
 
     async fn sign(&mut self, request: SignRequest) -> Result<Signature, SshAgentError> {
+        debug!("sign({:?})", request.credential); // TODO: saner display
         let signature = self.piv.sign(request.credential, &request.data)?;
         let Some(signature) = signature else {
             return Err(SshAgentError::Failure); // TODO: what error should we return for "not found"?

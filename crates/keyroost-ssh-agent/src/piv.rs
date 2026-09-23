@@ -56,7 +56,11 @@ impl PivSshAgent {
         let mut session = keyroost_transport::PivSession::open(&self.reader)
             .map_err(AgentError::TransportError)?;
         let identities = self.list_identities(&mut session)?;
-        Ok(identities.into_iter().map(Into::into).collect())
+        Ok(identities
+            .into_iter()
+            .inspect(|id| tracing::info!("found usable identity on slot {:?}", id.slot))
+            .map(Into::into)
+            .collect())
     }
 
     pub(super) fn sign(
@@ -73,6 +77,7 @@ impl PivSshAgent {
             .find(|id| id.ssh_identity.credential == public_credential);
 
         let Some(piv_identity) = piv_identity else {
+            tracing::debug!("not matching PIV identity for requested public key");
             return Ok(None);
         };
 
@@ -114,7 +119,12 @@ impl PivSshAgent {
     ) -> Result<impl Iterator<Item = PivIdentity> + 'b, AgentError> {
         Ok(self.slots.iter().flat_map(|slot| {
             // TODO: deal with Err here, probably logging is sufficient
-            slot_to_ssh_identity(session, *slot).ok().flatten()
+            slot_to_ssh_identity(session, *slot)
+                .inspect_err(|e| {
+                    tracing::warn!("failed to configure slot {slot:?} as PIV identity: {e}")
+                })
+                .ok()
+                .flatten()
         }))
     }
 }

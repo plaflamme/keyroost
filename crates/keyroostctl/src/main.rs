@@ -9035,10 +9035,18 @@ fn run_probe(session: &mut Session, authed: bool, include_destructive: bool, slo
 }
 
 fn run_agent(reader: Option<&str>, socket_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .with_writer(std::io::stderr)
+        .init();
+
     let readers = keyroost_transport::PivSession::list_piv_readers()?;
     let by_name = reader_from_name()?;
     let name = resolve_reader(readers, reader.or(by_name.as_deref()), "PIV")?;
-    eprintln!("\u{2192} PIV on {}", sanitize_terminal(&name));
+    tracing::info!("\u{2192} PIV on {}", sanitize_terminal(&name));
     let pin = read_secret("PIN", None, true)?;
     let piv_agent = keyroost_ssh_agent::PivSshAgent::new(name, pin);
     tokio::runtime::Builder::new_multi_thread()
