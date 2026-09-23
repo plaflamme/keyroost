@@ -29,7 +29,6 @@ impl ssh_agent_lib::agent::Session for KeyroostAgent {
         let Some(signature) = signature else {
             return Err(SshAgentError::Failure); // TODO: what error should we return for "not found"?
         };
-        eprintln!("sign success");
         Ok(signature)
     }
 }

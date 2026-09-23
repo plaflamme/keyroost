@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use keyroost_piv::x509_parse::X509ParseError;
 use keyroost_transport::TransportError;
 use ssh_agent_lib::{proto::Error as ProtoError, ssh_key};
 
@@ -11,8 +12,11 @@ pub enum AgentError {
     /// An SSH-agent application error
     SshAgentError(ssh_agent_lib::error::AgentError),
     SshKeyError(ssh_key::Error),
-    // A Keyroost transport error
+    /// A Keyroost transport error
     TransportError(TransportError),
+    /// PIV certificate parsing errors
+    X509Error(X509ParseError),
+    Other(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
 impl Display for AgentError {
@@ -22,6 +26,8 @@ impl Display for AgentError {
             Self::SshAgentError(error) => write!(f, "{error}"),
             Self::SshKeyError(error) => write!(f, "{error}"),
             Self::TransportError(transport_error) => write!(f, "{transport_error}"),
+            Self::X509Error(error) => write!(f, "{error}"),
+            Self::Other(other) => write!(f, "{other}"),
         }
     }
 }
@@ -45,6 +51,13 @@ impl From<ssh_agent_lib::ssh_key::Error> for AgentError {
         AgentError::SshKeyError(value)
     }
 }
+
+impl From<ssh_agent_lib::ssh_key::sec1::Error> for AgentError {
+    fn from(value: ssh_agent_lib::ssh_key::sec1::Error) -> Self {
+        AgentError::SshKeyError(ssh_key::Error::Ecdsa(value))
+    }
+}
+
 impl From<AgentError> for ssh_agent_lib::error::AgentError {
     fn from(value: AgentError) -> Self {
         match value {
@@ -56,11 +69,22 @@ impl From<AgentError> for ssh_agent_lib::error::AgentError {
             AgentError::TransportError(transport_error) => {
                 ssh_agent_lib::error::AgentError::Other(Box::new(transport_error))
             }
+            AgentError::X509Error(error) => {
+                ssh_agent_lib::error::AgentError::Other(Box::new(error))
+            }
+            AgentError::Other(error) => ssh_agent_lib::error::AgentError::Other(error),
         }
     }
 }
+
 impl From<TransportError> for AgentError {
     fn from(value: TransportError) -> Self {
         Self::TransportError(value)
+    }
+}
+
+impl From<X509ParseError> for AgentError {
+    fn from(value: X509ParseError) -> Self {
+        Self::X509Error(value)
     }
 }

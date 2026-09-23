@@ -11,14 +11,14 @@ description = "Implementation of the ssh agent protocol on top of keyroost APIs"
 workspace = true
 
 [dependencies]
-signature = "*"
-sha2 = "*"
-p256 = "*"
-p384 = "*"
-ecdsa = "*"
+ecdsa = "0.16"
 keyroost-openpgp = { path = "../keyroost-openpgp", version = "0.10.0" }
 keyroost-piv = { path = "../keyroost-piv", version = "0.10.0" }
 keyroost-transport = { path = "../keyroost-transport", version = "0.10.0" }
+p256 = "0.13"
+p384 = "0.13"
+sha2 = "0.11"
+signature = "2"
 ssh-agent-lib = "0.6"
 tokio = { version = "1", default-features = false, features = ["net"] }
 zeroize = { version = "1", default-features = false, features = ["alloc"] }
