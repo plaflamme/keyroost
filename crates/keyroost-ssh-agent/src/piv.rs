@@ -14,8 +14,6 @@ use ssh_agent_lib::{
 };
 use zeroize::Zeroizing;
 
-use crate::AgentError;
-
 struct PivIdentity {
     slot: Slot,
     key_alg: KeyAlg,
@@ -52,9 +50,8 @@ impl PivSshAgent {
         }
     }
 
-    pub(super) fn request_identities(&self) -> Result<Vec<Identity>, AgentError> {
-        let mut session = keyroost_transport::PivSession::open(&self.reader)
-            .map_err(AgentError::TransportError)?;
+    pub(super) fn request_identities(&self) -> Result<Vec<Identity>, crate::Error> {
+        let mut session = keyroost_transport::PivSession::open(&self.reader)?;
         let identities = self.list_identities(&mut session)?;
         Ok(identities
             .into_iter()
@@ -68,9 +65,8 @@ impl PivSshAgent {
         public_credential: PublicCredential,
         data: &[u8],
         rsa_sig_hash: Option<HashAlg>,
-    ) -> Result<Option<Signature>, AgentError> {
-        let mut session = keyroost_transport::PivSession::open(&self.reader)
-            .map_err(AgentError::TransportError)?;
+    ) -> Result<Option<Signature>, crate::Error> {
+        let mut session = keyroost_transport::PivSession::open(&self.reader)?;
 
         let piv_identity = self
             .list_identities(&mut session)?
@@ -88,7 +84,7 @@ impl PivSshAgent {
         let sig_hash = match keyroost_piv::x509::signature_hash(piv_identity.key_alg) {
             Ok(sig_hash) => sig_hash,
             Err(X509Error::UnsupportedAlgorithm) => return Ok(None),
-            Err(other) => return Err(AgentError::Other(Box::new(other))),
+            Err(other) => return Err(crate::Error::Other(Box::new(other))),
         };
 
         let prepared = match sig_hash {
@@ -100,14 +96,13 @@ impl PivSshAgent {
         let signature = session.sign(piv_identity.slot, piv_identity.key_alg, &prepared)?;
 
         let signature = match piv_identity.key_alg {
-            KeyAlg::EccP256 => Signature::try_from(
-                ecdsa::Signature::<p256::NistP256>::from_der(&signature)
-                    .map_err(|e| AgentError::Other(Box::new(e)))?,
-            )?,
-            KeyAlg::EccP384 => Signature::try_from(
-                ecdsa::Signature::<p384::NistP384>::from_der(&signature)
-                    .map_err(|e| AgentError::Other(Box::new(e)))?,
-            )?,
+            KeyAlg::EccP256 => {
+                Signature::try_from(ecdsa::Signature::<p256::NistP256>::from_der(&signature)?)?
+            }
+            KeyAlg::EccP384 => {
+                Signature::try_from(ecdsa::Signature::<p384::NistP384>::from_der(&signature)?)?
+            }
+
             KeyAlg::Ed25519 => {
                 Signature::new(ssh_agent_lib::ssh_key::Algorithm::Ed25519, signature)?
             }
@@ -117,7 +112,7 @@ impl PivSshAgent {
                     Some(HashAlg::Sha512) => sha2::Sha512::digest(signature).to_vec(),
                     None => signature,
                     Some(other) => {
-                        return Err(AgentError::Other(
+                        return Err(crate::Error::Other(
                             format!("Unsupported RSA hash algorithm {other}").into(),
                         ))
                     }
@@ -125,7 +120,7 @@ impl PivSshAgent {
                 Signature::new(Algorithm::Rsa { hash: rsa_sig_hash }, signature)?
             }
             KeyAlg::X25519 => {
-                return Err(AgentError::Other(
+                return Err(crate::Error::Other(
                     "Unsupported signature algorithm X25519".into(),
                 ))
             }
@@ -137,7 +132,7 @@ impl PivSshAgent {
     fn list_identities<'a: 'b, 'b>(
         &'a self,
         session: &'b mut PivSession,
-    ) -> Result<impl Iterator<Item = PivIdentity> + 'b, AgentError> {
+    ) -> Result<impl Iterator<Item = PivIdentity> + 'b, crate::Error> {
         Ok(self.slots.iter().flat_map(|slot| {
             // TODO: deal with Err here, probably logging is sufficient
             slot_to_ssh_identity(session, *slot)
@@ -153,7 +148,7 @@ impl PivSshAgent {
 fn slot_to_ssh_identity(
     session: &mut PivSession,
     slot: Slot,
-) -> Result<Option<PivIdentity>, AgentError> {
+) -> Result<Option<PivIdentity>, crate::Error> {
     let Some(cert) = session.read_certificate(slot)? else {
         return Ok(None);
     };
@@ -173,7 +168,7 @@ fn slot_to_ssh_identity(
 fn ssh_public_credentials(
     key_alg: KeyAlg,
     public_key: PublicKey,
-) -> Result<PublicCredential, AgentError> {
+) -> Result<PublicCredential, crate::Error> {
     let key_data = match public_key {
         PublicKey::Rsa { modulus, exponent } => KeyData::Rsa(RsaPublicKey {
             n: Mpint::from_bytes(&modulus)?,
@@ -188,13 +183,13 @@ fn ssh_public_credentials(
             }
             KeyAlg::Ed25519 => KeyData::Ed25519(Ed25519PublicKey::try_from(point.as_slice())?),
             KeyAlg::Rsa1024 | KeyAlg::Rsa2048 | KeyAlg::Rsa3072 | KeyAlg::Rsa4096 => {
-                return Err(AgentError::SshKeyError(
-                    ssh_agent_lib::ssh_key::Error::PublicKey,
+                return Err(crate::Error::Other(
+                    format!("Invalid KeyAlg {key_alg:?} and for PublicKey::Ecc").into(),
                 ))
             }
             KeyAlg::X25519 => {
                 // NOTE: this is technically unreachable because keyroost_piv::x509::signature_hash will already have returned "not supported"
-                return Err(AgentError::SshKeyError(
+                return Err(crate::Error::SshKey(
                     ssh_agent_lib::ssh_key::Error::AlgorithmUnknown,
                 ));
             }

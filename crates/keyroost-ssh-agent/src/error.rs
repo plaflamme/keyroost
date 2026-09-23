@@ -1,90 +1,85 @@
 use std::fmt::Display;
 
-use keyroost_piv::x509_parse::X509ParseError;
+use keyroost_piv::{x509::X509Error, x509_parse::X509ParseError};
 use keyroost_transport::TransportError;
 use ssh_agent_lib::{proto::Error as ProtoError, ssh_key};
 
 #[non_exhaustive]
 #[derive(Debug)]
-pub enum AgentError {
+pub(crate) enum Error {
     /// An IO error
     Io(std::io::Error),
-    /// An SSH-agent application error
-    SshAgentError(ssh_agent_lib::error::AgentError),
-    SshKeyError(ssh_key::Error),
-    /// A Keyroost transport error
-    TransportError(TransportError),
-    /// PIV certificate parsing errors
-    X509Error(X509ParseError),
+    SshKey(ssh_key::Error),
+    Signature(signature::Error),
     Other(Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
-impl Display for AgentError {
+impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io(error) => write!(f, "{error}"),
-            Self::SshAgentError(error) => write!(f, "{error}"),
-            Self::SshKeyError(error) => write!(f, "{error}"),
-            Self::TransportError(transport_error) => write!(f, "{transport_error}"),
-            Self::X509Error(error) => write!(f, "{error}"),
+            Self::SshKey(error) => write!(f, "{error}"),
+            Self::Signature(error) => write!(f, "{error}"),
             Self::Other(other) => write!(f, "{other}"),
         }
     }
 }
 
-impl std::error::Error for AgentError {}
+impl std::error::Error for Error {}
 
-impl From<std::io::Error> for AgentError {
+impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
         Self::Io(value)
     }
 }
 
-impl From<ssh_agent_lib::error::AgentError> for AgentError {
-    fn from(value: ssh_agent_lib::error::AgentError) -> Self {
-        AgentError::SshAgentError(value)
-    }
-}
-
-impl From<ssh_agent_lib::ssh_key::Error> for AgentError {
+impl From<ssh_agent_lib::ssh_key::Error> for Error {
     fn from(value: ssh_agent_lib::ssh_key::Error) -> Self {
-        AgentError::SshKeyError(value)
+        Error::SshKey(value)
     }
 }
 
-impl From<ssh_agent_lib::ssh_key::sec1::Error> for AgentError {
+impl From<ssh_agent_lib::ssh_key::sec1::Error> for Error {
     fn from(value: ssh_agent_lib::ssh_key::sec1::Error) -> Self {
-        AgentError::SshKeyError(ssh_key::Error::Ecdsa(value))
+        Error::SshKey(ssh_key::Error::Ecdsa(value))
     }
 }
 
-impl From<AgentError> for ssh_agent_lib::error::AgentError {
-    fn from(value: AgentError) -> Self {
+impl From<signature::Error> for Error {
+    fn from(value: signature::Error) -> Self {
+        Self::Signature(value)
+    }
+}
+
+impl From<TransportError> for Error {
+    fn from(value: TransportError) -> Self {
+        Self::Other(Box::new(value))
+    }
+}
+
+impl From<X509Error> for Error {
+    fn from(value: X509Error) -> Self {
+        Self::Other(Box::new(value))
+    }
+}
+
+impl From<X509ParseError> for Error {
+    fn from(value: X509ParseError) -> Self {
+        Self::Other(Box::new(value))
+    }
+}
+
+impl From<Error> for ssh_agent_lib::error::AgentError {
+    fn from(value: Error) -> Self {
         match value {
-            AgentError::Io(error) => ssh_agent_lib::error::AgentError::IO(error),
-            AgentError::SshAgentError(agent_error) => agent_error,
-            AgentError::SshKeyError(error) => {
+            Error::Io(error) => ssh_agent_lib::error::AgentError::IO(error),
+            Error::SshKey(error) => {
                 ssh_agent_lib::error::AgentError::Proto(ProtoError::SshKey(error))
             }
-            AgentError::TransportError(transport_error) => {
-                ssh_agent_lib::error::AgentError::Other(Box::new(transport_error))
+            Error::Signature(error) => {
+                ssh_agent_lib::error::AgentError::Proto(ProtoError::SshSignature(error))
             }
-            AgentError::X509Error(error) => {
-                ssh_agent_lib::error::AgentError::Other(Box::new(error))
-            }
-            AgentError::Other(error) => ssh_agent_lib::error::AgentError::Other(error),
+            Error::Other(error) => ssh_agent_lib::error::AgentError::Other(error),
         }
-    }
-}
-
-impl From<TransportError> for AgentError {
-    fn from(value: TransportError) -> Self {
-        Self::TransportError(value)
-    }
-}
-
-impl From<X509ParseError> for AgentError {
-    fn from(value: X509ParseError) -> Self {
-        Self::X509Error(value)
     }
 }
